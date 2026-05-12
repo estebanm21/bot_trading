@@ -1,0 +1,6 @@
+pybit
+anthropic
+pandas
+ta
+python-dotenv
+flask

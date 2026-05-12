@@ -1,0 +1,1518 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SMC Bot — Panel de Control</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap"
+      rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+      :root {
+        --bg: #0a0b0e;
+        --surface: #111318;
+        --border: #1e2330;
+        --border2: #2a3145;
+        --accent: #00e5a0;
+        --accent2: #00b87a;
+        --red: #ff4757;
+        --text: #e8ecf4;
+        --muted: #5a6480;
+        --label: #8892a8;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Syne", sans-serif;
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+
+      /* ── Fondo con grid ── */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        background-image:
+          linear-gradient(rgba(0, 229, 160, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 229, 160, 0.03) 1px, transparent 1px);
+        background-size: 40px 40px;
+        pointer-events: none;
+      }
+
+      /* ── Glow ambiental ── */
+      .glow-orb {
+        position: fixed;
+        border-radius: 50%;
+        filter: blur(80px);
+        pointer-events: none;
+        z-index: 0;
+      }
+      .glow-orb.g1 {
+        width: 400px;
+        height: 400px;
+        background: rgba(0, 229, 160, 0.07);
+        top: -100px;
+        left: -100px;
+      }
+      .glow-orb.g2 {
+        width: 300px;
+        height: 300px;
+        background: rgba(0, 100, 255, 0.05);
+        bottom: -50px;
+        right: -50px;
+      }
+
+      /* ── AUTH SCREEN ── */
+      #auth-screen {
+        position: relative;
+        z-index: 10;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .auth-card {
+        width: 100%;
+        max-width: 420px;
+        background: var(--surface);
+        border: 1px solid var(--border2);
+        border-radius: 20px;
+        padding: 48px 40px;
+        position: relative;
+        overflow: hidden;
+      }
+      .auth-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          var(--accent),
+          transparent
+        );
+      }
+
+      .logo-mark {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 36px;
+      }
+      .logo-icon {
+        width: 36px;
+        height: 36px;
+        background: var(--accent);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .logo-icon svg {
+        width: 20px;
+        height: 20px;
+        fill: #0a0b0e;
+      }
+      .logo-text {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.3px;
+        color: var(--text);
+      }
+      .logo-text span {
+        color: var(--accent);
+      }
+
+      .auth-title {
+        font-size: 28px;
+        font-weight: 800;
+        line-height: 1.1;
+        margin-bottom: 8px;
+        letter-spacing: -0.5px;
+      }
+      .auth-subtitle {
+        font-size: 14px;
+        color: var(--muted);
+        margin-bottom: 32px;
+        font-family: "Space Mono", monospace;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 2px;
+        background: var(--bg);
+        border-radius: 10px;
+        padding: 3px;
+        margin-bottom: 28px;
+      }
+      .tab-btn {
+        flex: 1;
+        padding: 10px;
+        background: transparent;
+        border: none;
+        color: var(--muted);
+        font-family: "Syne", sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .tab-btn.active {
+        background: var(--border2);
+        color: var(--text);
+      }
+
+      .field {
+        margin-bottom: 16px;
+      }
+      .field label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--label);
+        margin-bottom: 6px;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        font-family: "Space Mono", monospace;
+      }
+      .field input {
+        width: 100%;
+        background: var(--bg);
+        border: 1px solid var(--border2);
+        border-radius: 10px;
+        padding: 12px 16px;
+        color: var(--text);
+        font-family: "Space Mono", monospace;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+      .field input:focus {
+        border-color: var(--accent);
+      }
+      .field input::placeholder {
+        color: var(--muted);
+      }
+
+      .btn-primary {
+        width: 100%;
+        padding: 14px;
+        background: var(--accent);
+        border: none;
+        border-radius: 10px;
+        color: #0a0b0e;
+        font-family: "Syne", sans-serif;
+        font-size: 15px;
+        font-weight: 800;
+        cursor: pointer;
+        letter-spacing: -0.2px;
+        transition: all 0.2s;
+        margin-top: 8px;
+      }
+      .btn-primary:hover {
+        background: var(--accent2);
+        transform: translateY(-1px);
+      }
+      .btn-primary:active {
+        transform: translateY(0);
+      }
+      .btn-primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .msg {
+        margin-top: 14px;
+        padding: 12px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-family: "Space Mono", monospace;
+        display: none;
+      }
+      .msg.error {
+        background: rgba(255, 71, 87, 0.1);
+        border: 1px solid rgba(255, 71, 87, 0.3);
+        color: var(--red);
+      }
+      .msg.success {
+        background: rgba(0, 229, 160, 0.1);
+        border: 1px solid rgba(0, 229, 160, 0.3);
+        color: var(--accent);
+      }
+      .msg.show {
+        display: block;
+      }
+
+      /* ── DASHBOARD ── */
+      #dashboard {
+        display: none;
+        position: relative;
+        z-index: 10;
+        min-height: 100vh;
+      }
+
+      /* Header */
+      .header {
+        border-bottom: 1px solid var(--border);
+        padding: 0 32px;
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: rgba(10, 11, 14, 0.8);
+        backdrop-filter: blur(12px);
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+      .header-logo {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .user-badge {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--border);
+        border: 1px solid var(--border2);
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 13px;
+        font-family: "Space Mono", monospace;
+        color: var(--label);
+      }
+      .user-badge .dot {
+        width: 7px;
+        height: 7px;
+        background: var(--accent);
+        border-radius: 50%;
+      }
+      .btn-logout {
+        background: transparent;
+        border: 1px solid var(--border2);
+        border-radius: 8px;
+        padding: 6px 14px;
+        color: var(--muted);
+        font-size: 13px;
+        font-family: "Syne", sans-serif;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn-logout:hover {
+        border-color: var(--red);
+        color: var(--red);
+      }
+
+      /* Main */
+      .main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 48px 24px;
+      }
+
+      .page-title {
+        font-size: 32px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        margin-bottom: 6px;
+      }
+      .page-sub {
+        font-size: 14px;
+        color: var(--muted);
+        font-family: "Space Mono", monospace;
+        margin-bottom: 40px;
+      }
+
+      /* Cards */
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 32px;
+        margin-bottom: 20px;
+        position: relative;
+        overflow: hidden;
+        transition: border-color 0.2s;
+      }
+      .card:hover {
+        border-color: var(--border2);
+      }
+
+      .card-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      .card-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: rgba(0, 229, 160, 0.1);
+        border: 1px solid rgba(0, 229, 160, 0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .card-icon svg {
+        width: 18px;
+        height: 18px;
+        fill: var(--accent);
+      }
+      .card-title {
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.2px;
+      }
+      .card-desc {
+        font-size: 13px;
+        color: var(--muted);
+        font-family: "Space Mono", monospace;
+        margin-top: 2px;
+      }
+
+      /* Status chip */
+      .status-chip {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-family: "Space Mono", monospace;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-weight: 700;
+      }
+      .status-chip.connected {
+        background: rgba(0, 229, 160, 0.1);
+        color: var(--accent);
+        border: 1px solid rgba(0, 229, 160, 0.2);
+      }
+      .status-chip.disconnected {
+        background: rgba(90, 100, 128, 0.1);
+        color: var(--muted);
+        border: 1px solid var(--border);
+      }
+      .status-chip .dot-sm {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+      }
+      .status-chip.connected .dot-sm {
+        background: var(--accent);
+      }
+      .status-chip.disconnected .dot-sm {
+        background: var(--muted);
+      }
+
+      /* Input row */
+      .input-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      @media (max-width: 520px) {
+        .input-row {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .field-icon {
+        position: relative;
+      }
+      .field-icon input {
+        padding-right: 44px;
+      }
+      .eye-btn {
+        position: absolute;
+        right: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        transition: color 0.2s;
+      }
+      .eye-btn:hover {
+        color: var(--text);
+      }
+      .eye-btn svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      /* Amount field special */
+      .amount-wrapper {
+        position: relative;
+      }
+      .amount-wrapper .prefix {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--accent);
+        font-family: "Space Mono", monospace;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .amount-wrapper input {
+        padding-left: 30px;
+      }
+
+      /* Warning box */
+      .warning-box {
+        background: rgba(255, 71, 87, 0.06);
+        border: 1px solid rgba(255, 71, 87, 0.2);
+        border-radius: 10px;
+        padding: 14px 16px;
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      .warning-box svg {
+        width: 16px;
+        height: 16px;
+        fill: var(--red);
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .warning-box p {
+        font-size: 13px;
+        color: #ff8090;
+        font-family: "Space Mono", monospace;
+        line-height: 1.5;
+      }
+
+      .info-box {
+        background: rgba(0, 229, 160, 0.05);
+        border: 1px solid rgba(0, 229, 160, 0.15);
+        border-radius: 10px;
+        padding: 14px 16px;
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      .info-box svg {
+        width: 16px;
+        height: 16px;
+        fill: var(--accent);
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .info-box p {
+        font-size: 13px;
+        color: var(--label);
+        font-family: "Space Mono", monospace;
+        line-height: 1.5;
+      }
+
+      /* Save button */
+      .btn-save {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--accent);
+        border: none;
+        border-radius: 10px;
+        padding: 13px 24px;
+        color: #0a0b0e;
+        font-family: "Syne", sans-serif;
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+        letter-spacing: -0.2px;
+        transition: all 0.2s;
+        margin-top: 20px;
+      }
+      .btn-save:hover {
+        background: var(--accent2);
+        transform: translateY(-1px);
+      }
+      .btn-save:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .btn-save svg {
+        width: 16px;
+        height: 16px;
+        fill: #0a0b0e;
+      }
+
+      .btn-danger {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: transparent;
+        border: 1px solid rgba(255, 71, 87, 0.3);
+        border-radius: 10px;
+        padding: 13px 24px;
+        color: var(--red);
+        font-family: "Syne", sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        letter-spacing: -0.2px;
+        transition: all 0.2s;
+        margin-top: 12px;
+      }
+      .btn-danger:hover {
+        background: rgba(255, 71, 87, 0.1);
+      }
+      .btn-danger svg {
+        width: 16px;
+        height: 16px;
+        fill: var(--red);
+      }
+
+      /* Divider */
+      .divider {
+        border: none;
+        border-top: 1px solid var(--border);
+        margin: 24px 0;
+      }
+
+      /* Saved indicator */
+      .saved-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--muted);
+        font-family: "Space Mono", monospace;
+        margin-top: 10px;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .saved-row.show {
+        opacity: 1;
+      }
+      .saved-row svg {
+        width: 14px;
+        height: 14px;
+        fill: var(--accent);
+      }
+
+      /* Spinner */
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(10, 11, 14, 0.3);
+        border-top-color: #0a0b0e;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+      }
+
+      /* Masked key display */
+      .masked-key {
+        font-family: "Space Mono", monospace;
+        font-size: 13px;
+        color: var(--label);
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+      .masked-key span {
+        color: var(--muted);
+      }
+
+      /* Leverage badge */
+      .leverage-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
+      .lev-badge {
+        padding: 6px 16px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 700;
+        font-family: "Space Mono", monospace;
+        cursor: pointer;
+        border: 1px solid var(--border2);
+        background: transparent;
+        color: var(--muted);
+        transition: all 0.2s;
+      }
+      .lev-badge.active,
+      .lev-badge:hover {
+        background: rgba(0, 229, 160, 0.1);
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      /* ── Animations ── */
+      @keyframes fadeUp {
+        from {
+          opacity: 0;
+          transform: translateY(16px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .card {
+        animation: fadeUp 0.4s ease both;
+      }
+      .card:nth-child(1) {
+        animation-delay: 0.05s;
+      }
+      .card:nth-child(2) {
+        animation-delay: 0.12s;
+      }
+      .card:nth-child(3) {
+        animation-delay: 0.19s;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="glow-orb g1"></div>
+    <div class="glow-orb g2"></div>
+
+    <!-- ══════════════════════════════════ AUTH ══════════════════════════════════ -->
+    <div id="auth-screen">
+      <div class="auth-card">
+        <div class="logo-mark">
+          <div class="logo-icon">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm14 3v-3h-3v3h-3v3h3v3h3v-3h3v-3h-3z" />
+            </svg>
+          </div>
+          <span class="logo-text">SMC<span>Bot</span></span>
+        </div>
+
+        <h1 class="auth-title">Accede a tu<br />panel de control</h1>
+        <p class="auth-subtitle">// Master Estrategia SMC + MACD</p>
+
+        <div class="tabs">
+          <button
+            class="tab-btn active"
+            id="tab-login"
+            onclick="switchTab('login')">
+            Iniciar sesión
+          </button>
+          <button
+            class="tab-btn"
+            id="tab-register"
+            onclick="switchTab('register')">
+            Registrarse
+          </button>
+        </div>
+
+        <!-- LOGIN -->
+        <div id="form-login">
+          <div class="field">
+            <label>Correo electrónico</label>
+            <input type="email" id="login-email" placeholder="tu@email.com" />
+          </div>
+          <div class="field">
+            <label>Contraseña</label>
+            <div class="field-icon">
+              <input type="password" id="login-pass" placeholder="••••••••" />
+              <button
+                class="eye-btn"
+                onclick="togglePass('login-pass', this)"
+                tabindex="-1">
+                <svg
+                  id="eye-login"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <button class="btn-primary" id="btn-login" onclick="doLogin()">
+            Entrar
+          </button>
+        </div>
+
+        <!-- REGISTER -->
+        <div id="form-register" style="display: none">
+          <div class="field">
+            <label>Correo electrónico</label>
+            <input type="email" id="reg-email" placeholder="tu@email.com" />
+          </div>
+          <div class="field">
+            <label>Contraseña</label>
+            <div class="field-icon">
+              <input
+                type="password"
+                id="reg-pass"
+                placeholder="Mínimo 8 caracteres" />
+              <button
+                class="eye-btn"
+                onclick="togglePass('reg-pass', this)"
+                tabindex="-1">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Confirmar contraseña</label>
+            <input
+              type="password"
+              id="reg-pass2"
+              placeholder="Repite la contraseña" />
+          </div>
+          <button class="btn-primary" id="btn-register" onclick="doRegister()">
+            Crear cuenta
+          </button>
+        </div>
+
+        <div id="auth-msg" class="msg"></div>
+      </div>
+    </div>
+
+    <!-- ═════════════════════════════ DASHBOARD ══════════════════════════════ -->
+    <div id="dashboard">
+      <header class="header">
+        <div class="header-logo">
+          <div class="logo-icon" style="width: 30px; height: 30px">
+            <svg
+              viewBox="0 0 24 24"
+              style="width: 16px; height: 16px; fill: #0a0b0e">
+              <path
+                d="M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm14 3v-3h-3v3h-3v3h3v3h3v-3h3v-3h-3z" />
+            </svg>
+          </div>
+          <span class="logo-text" style="font-size: 16px"
+            >SMC<span>Bot</span></span
+          >
+        </div>
+        <div class="header-right">
+          <div class="user-badge">
+            <div class="dot"></div>
+            <span id="user-email-display">—</span>
+          </div>
+          <button class="btn-logout" onclick="doLogout()">Cerrar sesión</button>
+        </div>
+      </header>
+
+      <main class="main">
+        <h1 class="page-title">Configuración</h1>
+        <p class="page-sub">
+          // Conecta tu cuenta de Bybit y configura el capital de operación
+        </p>
+
+        <!-- ── CARD 1: Bybit API ── -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l5 2.18V11c0 3.5-2.33 6.79-5 7.93C9.33 17.79 7 14.5 7 11V7.18L12 5z" />
+              </svg>
+            </div>
+            <div>
+              <div class="card-title">API Keys de Bybit</div>
+              <div class="card-desc">
+                Cuenta real — Operaciones en producción
+              </div>
+            </div>
+            <div class="status-chip disconnected" id="api-status-chip">
+              <div class="dot-sm"></div>
+              <span id="api-status-text">Sin conectar</span>
+            </div>
+          </div>
+
+          <div class="warning-box">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M12 2L1 21h22L12 2zm0 3.5L20.5 19h-17L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
+            </svg>
+            <p>
+              Estas credenciales se guardan <strong>cifradas</strong> en tu
+              cuenta. Usa una API key con
+              <strong>solo permisos de trading</strong>, nunca de retiros.
+              Revoca las claves si sospechas de acceso no autorizado.
+            </p>
+          </div>
+
+          <div class="info-box">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+            </svg>
+            <p>
+              En Bybit: <strong>Cuenta → API</strong> → Crear clave → habilita
+              solo <em>Contratos (lectura + escritura)</em>.
+              <strong>No</strong> habilites retiros.
+            </p>
+          </div>
+
+          <!-- Claves guardadas (se muestra si ya hay config) -->
+          <div
+            id="saved-keys-display"
+            style="display: none; margin-bottom: 20px">
+            <div class="masked-key">
+              <span style="color: var(--label)">API Key</span>
+              <span id="masked-api-key">••••••••••••</span>
+            </div>
+            <div class="masked-key">
+              <span style="color: var(--label)">API Secret</span>
+              <span>••••••••••••••••••••••</span>
+            </div>
+          </div>
+
+          <div class="input-row">
+            <div class="field">
+              <label>API Key</label>
+              <div class="field-icon">
+                <input
+                  type="password"
+                  id="bybit-api-key"
+                  placeholder="Pega tu API key aquí" />
+                <button
+                  class="eye-btn"
+                  onclick="togglePass('bybit-api-key', this)"
+                  tabindex="-1">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="field">
+              <label>API Secret</label>
+              <div class="field-icon">
+                <input
+                  type="password"
+                  id="bybit-api-secret"
+                  placeholder="Pega tu API Secret aquí" />
+                <button
+                  class="eye-btn"
+                  onclick="togglePass('bybit-api-secret', this)"
+                  tabindex="-1">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn-save" id="btn-save-api" onclick="saveApiKeys()">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zm-5 16a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z" />
+            </svg>
+            Guardar API Keys
+          </button>
+
+          <div class="saved-row" id="saved-api-row">
+            <svg viewBox="0 0 24 24">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+            </svg>
+            Claves guardadas correctamente
+          </div>
+
+          <button
+            class="btn-danger"
+            id="btn-delete-api"
+            onclick="deleteApiKeys()"
+            style="display: none">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+            </svg>
+            Eliminar claves guardadas
+          </button>
+        </div>
+
+        <!-- ── CARD 2: Monto y Apalancamiento ── -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z" />
+              </svg>
+            </div>
+            <div>
+              <div class="card-title">Capital de Operación</div>
+              <div class="card-desc">
+                Monto en USDT por operación + apalancamiento
+              </div>
+            </div>
+          </div>
+
+          <div class="info-box">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+            </svg>
+            <p>
+              El monto es el <strong>capital real</strong> que arriesgas por
+              operación. Con 10x de apalancamiento, $100 controlan $1,000 en el
+              mercado. Gestiona el riesgo: máximo 1-2% de tu capital total por
+              operación.
+            </p>
+          </div>
+
+          <div class="input-row">
+            <div class="field">
+              <label>Monto por operación (USDT)</label>
+              <div class="amount-wrapper">
+                <span class="prefix">$</span>
+                <input
+                  type="number"
+                  id="order-usdt"
+                  placeholder="100"
+                  min="10"
+                  max="100000"
+                  step="10" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Apalancamiento</label>
+              <input
+                type="number"
+                id="leverage-input"
+                placeholder="10"
+                min="1"
+                max="100"
+                step="1"
+                readonly
+                style="cursor: default; color: var(--accent)" />
+            </div>
+          </div>
+
+          <div>
+            <p
+              style="
+                font-size: 12px;
+                color: var(--muted);
+                font-family: &quot;Space Mono&quot;, monospace;
+                margin-bottom: 8px;
+              ">
+              APALANCAMIENTO RÁPIDO
+            </p>
+            <div class="leverage-row" id="lev-row">
+              <button class="lev-badge" onclick="setLev(5)">5x</button>
+              <button class="lev-badge active" onclick="setLev(10)">10x</button>
+              <button class="lev-badge" onclick="setLev(15)">15x</button>
+              <button class="lev-badge" onclick="setLev(20)">20x</button>
+              <button class="lev-badge" onclick="setLev(25)">25x</button>
+            </div>
+          </div>
+
+          <hr class="divider" />
+
+          <!-- Resumen calculado -->
+          <div
+            id="calc-summary"
+            style="
+              display: flex;
+              gap: 24px;
+              flex-wrap: wrap;
+              margin-bottom: 4px;
+            ">
+            <div>
+              <p
+                style="
+                  font-size: 11px;
+                  color: var(--muted);
+                  font-family: &quot;Space Mono&quot;, monospace;
+                  margin-bottom: 4px;
+                ">
+                CAPITAL CONTROLADO
+              </p>
+              <p
+                style="font-size: 22px; font-weight: 800; color: var(--accent)"
+                id="calc-controlled">
+                $1,000
+              </p>
+            </div>
+            <div>
+              <p
+                style="
+                  font-size: 11px;
+                  color: var(--muted);
+                  font-family: &quot;Space Mono&quot;, monospace;
+                  margin-bottom: 4px;
+                ">
+                COMISIÓN EST.
+              </p>
+              <p
+                style="font-size: 22px; font-weight: 800; color: var(--label)"
+                id="calc-commission">
+                $1.10
+              </p>
+            </div>
+            <div>
+              <p
+                style="
+                  font-size: 11px;
+                  color: var(--muted);
+                  font-family: &quot;Space Mono&quot;, monospace;
+                  margin-bottom: 4px;
+                ">
+                TP (~3.7%)
+              </p>
+              <p
+                style="font-size: 22px; font-weight: 800; color: var(--accent)"
+                id="calc-tp">
+                +$37
+              </p>
+            </div>
+            <div>
+              <p
+                style="
+                  font-size: 11px;
+                  color: var(--muted);
+                  font-family: &quot;Space Mono&quot;, monospace;
+                  margin-bottom: 4px;
+                ">
+                SL (~6%)
+              </p>
+              <p
+                style="font-size: 22px; font-weight: 800; color: var(--red)"
+                id="calc-sl">
+                -$60
+              </p>
+            </div>
+          </div>
+
+          <button class="btn-save" id="btn-save-amount" onclick="saveAmount()">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zm-5 16a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z" />
+            </svg>
+            Guardar configuración
+          </button>
+
+          <div class="saved-row" id="saved-amount-row">
+            <svg viewBox="0 0 24 24">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+            </svg>
+            Configuración guardada
+          </div>
+        </div>
+
+        <!-- ── CARD 3: Estado del bot ── -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z" />
+              </svg>
+            </div>
+            <div>
+              <div class="card-title">Configuración del Bot</div>
+              <div class="card-desc">
+                Parámetros que el script Python usará al ejecutarse
+              </div>
+            </div>
+          </div>
+
+          <div class="info-box">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+            </svg>
+            <p>
+              Después de guardar, el bot leerá la configuración de Supabase.
+              Para activarlo en <strong>cuenta real</strong>, cambia
+              <code>demo=True</code> a <code>demo=False</code> en el script
+              Python.
+            </p>
+          </div>
+
+          <div
+            id="config-preview"
+            style="
+              font-family: &quot;Space Mono&quot;, monospace;
+              font-size: 13px;
+              color: var(--label);
+              line-height: 2;
+              background: var(--bg);
+              border: 1px solid var(--border);
+              border-radius: 10px;
+              padding: 16px 20px;
+            ">
+            <span style="color: var(--muted)"># Cargando configuración...</span>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      // ═══════════════════════════════════════════════
+      // CONFIGURACIÓN SUPABASE — EDITA ESTOS VALORES
+      // ═══════════════════════════════════════════════
+      const SUPABASE_URL = "https://rhqkvmastypsithenaww.supabase.co"; // ← reemplaza
+      const SUPABASE_ANON =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJocWt2bWFzdHlwc2l0aGVuYXd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2MDI5NTQsImV4cCI6MjA5NDE3ODk1NH0.uNcUfZadI-0NXGtwiRC-hpkDEpnQdiSd8wSiP_X2QzE"; // ← reemplaza
+
+      const { createClient } = supabase;
+      const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+      // ─────────── Estado ───────────
+      let currentUser = null;
+      let currentLev = 10;
+
+      // ─────────── Utilidades ───────────
+      function showMsg(text, type = "error") {
+        const el = document.getElementById("auth-msg");
+        el.textContent = text;
+        el.className = `msg ${type} show`;
+      }
+
+      function togglePass(id, btn) {
+        const inp = document.getElementById(id);
+        const isPass = inp.type === "password";
+        inp.type = isPass ? "text" : "password";
+        btn.innerHTML = isPass
+          ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+          : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+      }
+
+      function setLev(val) {
+        currentLev = val;
+        document.getElementById("leverage-input").value = val;
+        document.querySelectorAll(".lev-badge").forEach((b) => {
+          b.classList.toggle("active", b.textContent === `${val}x`);
+        });
+        updateCalc();
+      }
+
+      function updateCalc() {
+        const usdt =
+          parseFloat(document.getElementById("order-usdt").value) || 100;
+        const lev = currentLev;
+        const ctrl = usdt * lev;
+        const comm = ctrl * 0.0011;
+        const tp = (usdt / 1000) * 37;
+        const sl = (usdt / 1000) * 60;
+        document.getElementById("calc-controlled").textContent =
+          `$${ctrl.toLocaleString()}`;
+        document.getElementById("calc-commission").textContent =
+          `$${comm.toFixed(2)}`;
+        document.getElementById("calc-tp").textContent = `+$${tp.toFixed(0)}`;
+        document.getElementById("calc-sl").textContent = `-$${sl.toFixed(0)}`;
+      }
+
+      // ─────────── Auth ───────────
+      function switchTab(tab) {
+        document.getElementById("form-login").style.display =
+          tab === "login" ? "" : "none";
+        document.getElementById("form-register").style.display =
+          tab === "register" ? "" : "none";
+        document
+          .getElementById("tab-login")
+          .classList.toggle("active", tab === "login");
+        document
+          .getElementById("tab-register")
+          .classList.toggle("active", tab === "register");
+        document.getElementById("auth-msg").className = "msg";
+      }
+
+      async function doLogin() {
+        const email = document.getElementById("login-email").value.trim();
+        const pass = document.getElementById("login-pass").value;
+        if (!email || !pass) {
+          showMsg("Completa todos los campos");
+          return;
+        }
+        const btn = document.getElementById("btn-login");
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner" style="margin:0 auto"></div>';
+        const { error } = await sb.auth.signInWithPassword({
+          email,
+          password: pass,
+        });
+        btn.disabled = false;
+        btn.textContent = "Entrar";
+        if (error) showMsg(error.message);
+      }
+
+      async function doRegister() {
+        const email = document.getElementById("reg-email").value.trim();
+        const pass = document.getElementById("reg-pass").value;
+        const pass2 = document.getElementById("reg-pass2").value;
+        if (!email || !pass || !pass2) {
+          showMsg("Completa todos los campos");
+          return;
+        }
+        if (pass !== pass2) {
+          showMsg("Las contraseñas no coinciden");
+          return;
+        }
+        if (pass.length < 8) {
+          showMsg("Mínimo 8 caracteres en la contraseña");
+          return;
+        }
+        const btn = document.getElementById("btn-register");
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner" style="margin:0 auto"></div>';
+        const { error } = await sb.auth.signUp({ email, password: pass });
+        btn.disabled = false;
+        btn.textContent = "Crear cuenta";
+        if (error) showMsg(error.message);
+        else
+          showMsg(
+            "✓ Cuenta creada. Revisa tu correo para confirmar.",
+            "success",
+          );
+      }
+
+      async function doLogout() {
+        await sb.auth.signOut();
+        currentUser = null;
+        document.getElementById("dashboard").style.display = "none";
+        document.getElementById("auth-screen").style.display = "flex";
+      }
+
+      // ─────────── Dashboard ───────────
+      async function showDashboard(user) {
+        currentUser = user;
+        document.getElementById("auth-screen").style.display = "none";
+        document.getElementById("dashboard").style.display = "block";
+        document.getElementById("user-email-display").textContent = user.email;
+        await loadUserConfig();
+        document
+          .getElementById("order-usdt")
+          .addEventListener("input", updateCalc);
+        updateCalc();
+      }
+
+      async function loadUserConfig() {
+        const { data, error } = await sb
+          .from("bot_config")
+          .select("*")
+          .eq("user_id", currentUser.id)
+          .maybeSingle();
+
+        if (!data) {
+          updateConfigPreview(null);
+          return;
+        }
+
+        // Mostrar claves enmascaradas
+        if (data.bybit_api_key) {
+          document.getElementById("saved-keys-display").style.display = "block";
+          const masked =
+            data.bybit_api_key.substring(0, 6) +
+            "••••••" +
+            data.bybit_api_key.slice(-4);
+          document.getElementById("masked-api-key").textContent = masked;
+          document.getElementById("btn-delete-api").style.display = "flex";
+          document.getElementById("api-status-chip").className =
+            "status-chip connected";
+          document.getElementById("api-status-text").textContent = "Conectado";
+        }
+
+        if (data.order_usdt) {
+          document.getElementById("order-usdt").value = data.order_usdt;
+        }
+        if (data.leverage) {
+          setLev(data.leverage);
+        }
+
+        updateConfigPreview(data);
+        updateCalc();
+      }
+
+      function updateConfigPreview(data) {
+        const el = document.getElementById("config-preview");
+        if (!data) {
+          el.innerHTML = `<span style="color:var(--muted)"># Sin configuración guardada aún</span>`;
+          return;
+        }
+        const apiStatus = data.bybit_api_key
+          ? `<span style="color:var(--accent)">✓ Configurado</span>`
+          : `<span style="color:var(--red)">✗ Pendiente</span>`;
+        el.innerHTML = `
+<span style="color:var(--muted)"># Configuración activa del bot</span>
+<br><span style="color:var(--label)">BYBIT_API_KEY</span>  = ${apiStatus}
+<br><span style="color:var(--label)">BYBIT_ACCOUNT</span>  = <span style="color:var(--accent)">REAL</span>   <span style="color:var(--muted)"># demo=False</span>
+<br><span style="color:var(--label)">ORDER_USDT</span>     = <span style="color:var(--text)">${data.order_usdt || 100}</span>
+<br><span style="color:var(--label)">LEVERAGE</span>       = <span style="color:var(--text)">${data.leverage || 10}x</span>
+<br><span style="color:var(--label)">CAPITAL_CTRL</span>   = <span style="color:var(--accent)">$${((data.order_usdt || 100) * (data.leverage || 10)).toLocaleString()}</span>
+<br><span style="color:var(--label)">SYMBOLS</span>        = <span style="color:var(--text)">["SOLUSDT","XRPUSDT","ETHUSDT"]</span>
+<br><span style="color:var(--label)">LAST_UPDATE</span>    = <span style="color:var(--muted)">${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC</span>
+  `;
+      }
+
+      async function saveApiKeys() {
+        const apiKey = document.getElementById("bybit-api-key").value.trim();
+        const apiSecret = document
+          .getElementById("bybit-api-secret")
+          .value.trim();
+        if (!apiKey || !apiSecret) {
+          alert("Ingresa ambas claves antes de guardar.");
+          return;
+        }
+
+        const btn = document.getElementById("btn-save-api");
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> Guardando...';
+
+        const payload = {
+          user_id: currentUser.id,
+          bybit_api_key: apiKey,
+          bybit_api_secret: apiSecret,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error } = await sb
+          .from("bot_config")
+          .upsert(payload, { onConflict: "user_id" });
+        btn.disabled = false;
+        btn.innerHTML = `<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:#0a0b0e"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zm-5 16a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/></svg> Guardar API Keys`;
+
+        if (!error) {
+          document.getElementById("bybit-api-key").value = "";
+          document.getElementById("bybit-api-secret").value = "";
+          const row = document.getElementById("saved-api-row");
+          row.classList.add("show");
+          setTimeout(() => row.classList.remove("show"), 3000);
+          await loadUserConfig();
+        } else {
+          alert("Error al guardar: " + error.message);
+        }
+      }
+
+      async function deleteApiKeys() {
+        if (
+          !confirm(
+            "¿Eliminar las claves guardadas? El bot dejará de funcionar.",
+          )
+        )
+          return;
+        const { error } = await sb
+          .from("bot_config")
+          .update({ bybit_api_key: null, bybit_api_secret: null })
+          .eq("user_id", currentUser.id);
+        if (!error) {
+          document.getElementById("saved-keys-display").style.display = "none";
+          document.getElementById("btn-delete-api").style.display = "none";
+          document.getElementById("api-status-chip").className =
+            "status-chip disconnected";
+          document.getElementById("api-status-text").textContent =
+            "Sin conectar";
+          updateConfigPreview(null);
+        }
+      }
+
+      async function saveAmount() {
+        const usdt = parseFloat(document.getElementById("order-usdt").value);
+        if (!usdt || usdt < 10) {
+          alert("Ingresa un monto válido (mínimo $10)");
+          return;
+        }
+
+        const btn = document.getElementById("btn-save-amount");
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> Guardando...';
+
+        const payload = {
+          user_id: currentUser.id,
+          order_usdt: usdt,
+          leverage: currentLev,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error } = await sb
+          .from("bot_config")
+          .upsert(payload, { onConflict: "user_id" });
+        btn.disabled = false;
+        btn.innerHTML = `<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:#0a0b0e"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zm-5 16a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/></svg> Guardar configuración`;
+
+        if (!error) {
+          const row = document.getElementById("saved-amount-row");
+          row.classList.add("show");
+          setTimeout(() => row.classList.remove("show"), 3000);
+          await loadUserConfig();
+        } else {
+          alert("Error al guardar: " + error.message);
+        }
+      }
+
+      // ─────────── Session listener ───────────
+
+      sb.auth.onAuthStateChange(async (event, session) => {
+        if (session?.user) {
+          await showDashboard(session.user);
+        } else {
+          document.getElementById("dashboard").style.display = "none";
+          document.getElementById("auth-screen").style.display = "flex";
+        }
+      });
+
+      // Verificar sesión activa al cargar la página
+      sb.auth.getSession().then(async ({ data: { session } }) => {
+        if (session?.user) {
+          await showDashboard(session.user);
+        }
+      });
+    </script>
+  </body>
+</html>
