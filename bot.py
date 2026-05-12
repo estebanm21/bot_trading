@@ -236,7 +236,7 @@ PILARES:
 4. MACD 15M: cambio_rojo_a_verde=compra, cambio_verde_a_rojo=venta. Sin esto NO entrar.
 5. BTC: alineado con la dirección de la operación
 
-REGLAS: Mínimo 4/5 pilares. Si no hay setup claro -> NO_TRADE.
+REGLAS: Mínimo 5/5 pilares. Si no hay setup claro -> NO_TRADE.
 
 Responde SOLO este JSON:
 {{
@@ -417,7 +417,7 @@ def user_trade_thread(user: dict, decision: dict):
     log.info(f"  [Usuario {uid[:8]}] Capital: ${order_usdt} x{leverage} = ${controlled} | TP: +${tp_usd} | SL: -${sl_usd}")
 
     try:
-        client = HTTP(testnet=False, demo=False, api_key=api_key, api_secret=api_secret)
+        client = HTTP(testnet=False, demo=True, api_key=api_key, api_secret=api_secret)
     except Exception as e:
         log.error(f"  [Usuario {uid[:8]}] Error creando cliente Bybit: {e}")
         return
