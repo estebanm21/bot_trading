@@ -1,15 +1,23 @@
 """
 ╔══════════════════════════════════════════════════════════════════╗
-║      MASTER ESTRATEGIA BOT - MULTI-USUARIO                     ║
-║      SMC + MACD + BTC  |  Hasta 50 cuentas en paralelo        ║
+║         MASTER ESTRATEGIA BOT - SMC + MACD + BTC               ║
+║         Multi-usuario con Supabase  |  Hasta 50 cuentas        ║
 ╚══════════════════════════════════════════════════════════════════╝
 
-Arquitectura:
+5 PILARES:
+  1. Tendencia (4H + 1H)
+  2. Zona de reaccion SMC (soporte/resistencia clave)
+  3. Posicionamiento (precio dentro de la zona)
+  4. Confirmacion MACD 15M (cambio de histograma)
+  5. Acompanamiento BTC (alineacion de mercado)
+
+Arquitectura multi-usuario:
   - Un hilo principal detecta señales SMC (analisis compartido)
   - Cuando hay señal, abre orden en TODAS las cuentas activas
   - Cada cuenta tiene su propio TP/SL proporcional a su capital
-  - Base de referencia: $1000 → TP +$37 | SL -$60
-  - Regla de tres automatica por usuario
+  - Capital y leverage se leen desde Supabase (interfaz grafica)
+
+Regla de oro: Si no hay setup claro -> NO opera. Paciencia.
 """
 
 import os, sys, time, json, csv, logging, threading
@@ -21,11 +29,11 @@ import anthropic
 from pybit.unified_trading import HTTP
 from supabase import create_client
 
-load_dotenv()
-
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
+
+load_dotenv()
 
 # ─────────────────────────────────────────────────────────────────
 # CONFIGURACION GLOBAL
@@ -34,16 +42,18 @@ SUPABASE_URL         = os.getenv("SUPABASE_URL", "https://rhqkvmastypsithenaww.s
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 ANTHROPIC_API_KEY    = os.getenv("ANTHROPIC_API_KEY", "")
 
-SYMBOLS      = ["SOLUSDT", "XRPUSDT", "ETHUSDT"]
-BTC_SYMBOL   = "BTCUSDT"
-LOG_FILE     = "trades_log.csv"
-CHECK_EVERY  = 60       # segundos entre scans
-COMMISSION_PCT = 0.0011
+SYMBOLS        = ["SOLUSDT", "XRPUSDT", "ETHUSDT"]
+BTC_SYMBOL     = "BTCUSDT"
+LOG_FILE       = "trades_log.csv"
+CHECK_EVERY    = 60       # segundos entre scans
+COMMISSION_PCT = 0.0011   # 0.055% entrada + 0.055% salida
 
 # Base de referencia para calcular TP/SL proporcional
-BASE_CAPITAL = 1000.0   # $1000 de referencia
-BASE_TP_USD  = 37.0     # +$37 con $1000
-BASE_SL_USD  = 60.0     # -$60 con $1000
+# Con $1000 capital y 10x leverage → TP +$37 | SL -$60
+BASE_CAPITAL = 1000.0
+BASE_LEVERAGE = 10
+BASE_TP_USD  = 37.0
+BASE_SL_USD  = 60.0
 
 sb     = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -72,6 +82,7 @@ csv_lock = threading.Lock()
 def get_active_users() -> list:
     """
     Devuelve lista de usuarios con API keys configuradas.
+    order_usdt y leverage se leen desde la interfaz grafica (Supabase).
     Solo usuarios que tienen bybit_api_key y bybit_api_secret.
     """
     try:
@@ -89,17 +100,21 @@ def get_active_users() -> list:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 2. ANALISIS DE MERCADO (COMPARTIDO — corre una sola vez)
+# 2. OBTENER VELAS MULTI-TEMPORAL
 # ═══════════════════════════════════════════════════════════════
 
-def get_candles_public(symbol: str, interval: str, limit: int = 100) -> pd.DataFrame:
-    """Obtiene velas usando cliente publico (sin API key, datos de mercado)."""
+def get_candles(symbol: str, interval: str, limit: int = 100) -> pd.DataFrame:
+    """
+    Obtiene velas usando cliente publico (sin API key, datos de mercado).
+    Incluye retry automatico igual que el bot original.
+    """
     public = HTTP(testnet=False)
+    interval_map = {"5": "5", "15": "15", "30": "30", "60": "60", "240": "240"}
     for attempt in range(3):
         try:
             resp = public.get_kline(
                 category="linear", symbol=symbol,
-                interval=interval, limit=limit
+                interval=interval_map.get(interval, interval), limit=limit
             )
             df = pd.DataFrame(resp["result"]["list"],
                               columns=["timestamp","open","high","low","close","volume","turnover"])
@@ -108,44 +123,62 @@ def get_candles_public(symbol: str, interval: str, limit: int = 100) -> pd.DataF
             return df.sort_values("timestamp").reset_index(drop=True)
         except Exception as e:
             if attempt < 2:
+                log.warning(f"Reintento {attempt+1} velas {symbol} {interval}m: {e}")
                 time.sleep(2)
             else:
-                log.error(f"Error velas {symbol} {interval}: {e}")
+                log.error(f"Error velas {symbol} {interval}m: {e}")
                 return pd.DataFrame()
     return pd.DataFrame()
 
+def get_price(client: HTTP, symbol: str) -> float:
+    try:
+        return float(client.get_tickers(category="linear", symbol=symbol)["result"]["list"][0]["lastPrice"])
+    except:
+        return 0.0
+
+
+# ═══════════════════════════════════════════════════════════════
+# 3. CALCULAR INDICADORES POR TEMPORALIDAD
+# ═══════════════════════════════════════════════════════════════
 
 def calc_indicators(df: pd.DataFrame) -> dict:
+    """Calcula todos los indicadores para una temporalidad. Identico al bot original."""
     if df.empty or len(df) < 30:
         return {}
     c, h, l, v = df["close"], df["high"], df["low"], df["volume"]
 
-    macd   = ta_lib.trend.MACD(c, window_slow=26, window_fast=12, window_sign=9)
-    bb     = ta_lib.volatility.BollingerBands(c, window=20, window_dev=2)
-    rsi    = ta_lib.momentum.RSIIndicator(c, window=14).rsi()
-    ema20  = ta_lib.trend.EMAIndicator(c, window=20).ema_indicator()
-    ema50  = ta_lib.trend.EMAIndicator(c, window=50).ema_indicator()
-    ema200 = ta_lib.trend.EMAIndicator(c, window=min(200, len(c)-1)).ema_indicator()
+    macd     = ta_lib.trend.MACD(c, window_slow=26, window_fast=12, window_sign=9)
+    bb       = ta_lib.volatility.BollingerBands(c, window=20, window_dev=2)
+    rsi      = ta_lib.momentum.RSIIndicator(c, window=14).rsi()
+    ema20    = ta_lib.trend.EMAIndicator(c, window=20).ema_indicator()
+    ema50    = ta_lib.trend.EMAIndicator(c, window=50).ema_indicator()
+    ema200   = ta_lib.trend.EMAIndicator(c, window=min(200, len(c)-1)).ema_indicator()
 
+    # Highs y lows recientes para zonas SMC
     recent_high = round(float(h.tail(20).max()), 4)
     recent_low  = round(float(l.tail(20).min()), 4)
+    prev_high   = round(float(h.iloc[-2]), 4)
+    prev_low    = round(float(l.iloc[-2]), 4)
 
+    # MACD histograma actual y anterior (clave para confirmacion)
     macd_hist_now  = round(float(macd.macd_diff().iloc[-1]), 6)
     macd_hist_prev = round(float(macd.macd_diff().iloc[-2]), 6)
 
+    # Determinar color del histograma MACD
     if macd_hist_now > 0 and macd_hist_prev > 0:
         macd_color = "verde_fuerte" if macd_hist_now > macd_hist_prev else "verde_claro"
     elif macd_hist_now < 0 and macd_hist_prev < 0:
         macd_color = "rojo_fuerte" if abs(macd_hist_now) > abs(macd_hist_prev) else "rojo_claro"
     elif macd_hist_now > 0 and macd_hist_prev < 0:
-        macd_color = "cambio_rojo_a_verde"
+        macd_color = "cambio_rojo_a_verde"  # SEÑAL DE COMPRA
     elif macd_hist_now < 0 and macd_hist_prev > 0:
-        macd_color = "cambio_verde_a_rojo"
+        macd_color = "cambio_verde_a_rojo"  # SEÑAL DE VENTA
     else:
         macd_color = "neutral"
 
     price_now = round(float(c.iloc[-1]), 6)
 
+    # Tendencia basada en EMAs
     if float(ema20.iloc[-1]) > float(ema50.iloc[-1]) > float(ema200.iloc[-1]):
         trend = "alcista_fuerte"
     elif float(ema20.iloc[-1]) > float(ema50.iloc[-1]):
@@ -157,35 +190,44 @@ def calc_indicators(df: pd.DataFrame) -> dict:
     else:
         trend = "lateral"
 
+    # Posicion del precio respecto a EMAs
+    price_vs_ema20 = "encima" if price_now > float(ema20.iloc[-1]) else "debajo"
+    price_vs_ema50 = "encima" if price_now > float(ema50.iloc[-1]) else "debajo"
+
+    # Bollinger position (0=inferior, 100=superior)
     bb_range = float(bb.bollinger_hband().iloc[-1]) - float(bb.bollinger_lband().iloc[-1])
     bb_pos   = round((price_now - float(bb.bollinger_lband().iloc[-1])) / max(bb_range, 0.0001) * 100, 1)
 
     return {
-        "price": price_now, "trend": trend,
-        "ema20": round(float(ema20.iloc[-1]), 6),
-        "ema50": round(float(ema50.iloc[-1]), 6),
-        "ema200": round(float(ema200.iloc[-1]), 6),
-        "price_vs_ema20": "encima" if price_now > float(ema20.iloc[-1]) else "debajo",
-        "price_vs_ema50": "encima" if price_now > float(ema50.iloc[-1]) else "debajo",
-        "rsi": round(float(rsi.iloc[-1]), 2),
-        "macd_hist": macd_hist_now, "macd_hist_prev": macd_hist_prev,
-        "macd_color": macd_color,
-        "bb_upper": round(float(bb.bollinger_hband().iloc[-1]), 6),
-        "bb_mid":   round(float(bb.bollinger_mavg().iloc[-1]), 6),
-        "bb_lower": round(float(bb.bollinger_lband().iloc[-1]), 6),
-        "bb_pos": bb_pos,
-        "recent_high": recent_high, "recent_low": recent_low,
-        "prev_high": round(float(h.iloc[-2]), 4),
-        "prev_low":  round(float(l.iloc[-2]), 4),
-        "vol_now": round(float(v.iloc[-1]), 2),
-        "vol_avg": round(float(v.tail(20).mean()), 2),
+        "price":          price_now,
+        "trend":          trend,
+        "ema20":          round(float(ema20.iloc[-1]), 6),
+        "ema50":          round(float(ema50.iloc[-1]), 6),
+        "ema200":         round(float(ema200.iloc[-1]), 6),
+        "price_vs_ema20": price_vs_ema20,
+        "price_vs_ema50": price_vs_ema50,
+        "rsi":            round(float(rsi.iloc[-1]), 2),
+        "macd_hist":      macd_hist_now,
+        "macd_hist_prev": macd_hist_prev,
+        "macd_color":     macd_color,
+        "bb_upper":       round(float(bb.bollinger_hband().iloc[-1]), 6),
+        "bb_mid":         round(float(bb.bollinger_mavg().iloc[-1]), 6),
+        "bb_lower":       round(float(bb.bollinger_lband().iloc[-1]), 6),
+        "bb_pos":         bb_pos,
+        "recent_high":    recent_high,
+        "recent_low":     recent_low,
+        "prev_high":      prev_high,
+        "prev_low":       prev_low,
+        "vol_now":        round(float(v.iloc[-1]), 2),
+        "vol_avg":        round(float(v.tail(20).mean()), 2),
     }
 
 
 def get_full_analysis(symbol: str) -> dict:
+    """Obtiene analisis completo multi-temporal para un simbolo. Identico al bot original."""
     data = {"symbol": symbol}
-    for tf, label in [("240","4h"),("60","1h"),("30","30m"),("15","15m")]:
-        df  = get_candles_public(symbol, tf, limit=100)
+    for tf, label in [("240", "4h"), ("60", "1h"), ("30", "30m"), ("15", "15m")]:
+        df  = get_candles(symbol, tf, limit=100)
         ind = calc_indicators(df)
         data[label] = ind
         time.sleep(0.2)
@@ -193,34 +235,72 @@ def get_full_analysis(symbol: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 3. IA — ANALISIS SMC (igual que antes, compartido)
+# 4. PROMPT MASTER ESTRATEGIA SMC — IDENTICO AL ORIGINAL
 # ═══════════════════════════════════════════════════════════════
 
 def analyze_with_smc(all_data: list, btc_data: dict) -> dict:
+    """
+    Aplica la Master Estrategia SMC con los 5 pilares.
+    Prompt completo e identico al bot original.
+    Puede retornar NO_TRADE si no hay setup claro.
+    """
+
+    # Formatear datos de cada activo — igual que el original
     assets_text = ""
     for d in all_data:
         sym = d["symbol"]
         h4  = d.get("4h", {})
         h1  = d.get("1h", {})
         m15 = d.get("15m", {})
-        m30 = d.get("30m", {})
         if not h4 or not h1 or not m15:
             continue
+
+        m30 = d.get("30m", {})
         assets_text += f"""
 ═══ {sym} ═══
-4H: Tendencia={h4.get('trend')} | Precio={h4.get('price')} | RSI={h4.get('rsi')} | MACD={h4.get('macd_color')}
-    Zona alta={h4.get('recent_high')} | Zona baja={h4.get('recent_low')} | BB pos={h4.get('bb_pos')}%
-1H: Tendencia={h1.get('trend')} | Precio={h1.get('price')} | RSI={h1.get('rsi')} | MACD={h1.get('macd_color')}
-    Zona alta={h1.get('recent_high')} | Zona baja={h1.get('recent_low')} | BB pos={h1.get('bb_pos')}%
-30M: Tendencia={m30.get('trend')} | MACD={m30.get('macd_color')} | BB pos={m30.get('bb_pos')}%
-15M: MACD hist={m15.get('macd_hist')} | COLOR={m15.get('macd_color')} | RSI={m15.get('rsi')} | Vol={m15.get('vol_now')}/{m15.get('vol_avg')}
+TEMPORALIDAD 4H (TENDENCIA MACRO):
+  Tendencia: {h4.get('trend')} | Precio: {h4.get('price')}
+  EMA20: {h4.get('ema20')} | EMA50: {h4.get('ema50')} | EMA200: {h4.get('ema200')}
+  Precio vs EMA20: {h4.get('price_vs_ema20')} | vs EMA50: {h4.get('price_vs_ema50')}
+  RSI: {h4.get('rsi')} | MACD hist: {h4.get('macd_hist')} ({h4.get('macd_color')})
+  Zona alta (resistencia): {h4.get('recent_high')} | Zona baja (soporte): {h4.get('recent_low')}
+  Bollinger: sup={h4.get('bb_upper')} mid={h4.get('bb_mid')} inf={h4.get('bb_lower')} | Posicion: {h4.get('bb_pos')}%
+
+TEMPORALIDAD 1H (DOBLE CONFIRMACION SMC - PRIMERA):
+  Tendencia: {h1.get('trend')} | Precio: {h1.get('price')}
+  EMA20: {h1.get('ema20')} | EMA50: {h1.get('ema50')}
+  Precio vs EMA20: {h1.get('price_vs_ema20')} | vs EMA50: {h1.get('price_vs_ema50')}
+  RSI: {h1.get('rsi')} | MACD hist: {h1.get('macd_hist')} ({h1.get('macd_color')})
+  Zona alta: {h1.get('recent_high')} | Zona baja: {h1.get('recent_low')}
+  Bollinger: sup={h1.get('bb_upper')} mid={h1.get('bb_mid')} inf={h1.get('bb_lower')} | Posicion: {h1.get('bb_pos')}%
+
+TEMPORALIDAD 30M (DOBLE CONFIRMACION SMC - SEGUNDA):
+  Tendencia: {m30.get('trend')} | Precio: {m30.get('price')}
+  EMA20: {m30.get('ema20')} | EMA50: {m30.get('ema50')}
+  Precio vs EMA20: {m30.get('price_vs_ema20')} | vs EMA50: {m30.get('price_vs_ema50')}
+  RSI: {m30.get('rsi')} | MACD hist: {m30.get('macd_hist')} ({m30.get('macd_color')})
+  Zona alta: {m30.get('recent_high')} | Zona baja: {m30.get('recent_low')}
+  Bollinger: sup={m30.get('bb_upper')} mid={m30.get('bb_mid')} inf={m30.get('bb_lower')} | Posicion: {m30.get('bb_pos')}%
+
+TEMPORALIDAD 15M (CONFIRMACION MACD - ENTRADA):
+  Tendencia: {m15.get('trend')} | Precio: {m15.get('price')}
+  MACD histograma ahora: {m15.get('macd_hist')} | anterior: {m15.get('macd_hist_prev')}
+  COLOR MACD 15M: {m15.get('macd_color')} <-- DISPARO DE ENTRADA
+  RSI: {m15.get('rsi')} | Bollinger posicion: {m15.get('bb_pos')}%
+  Zona alta: {m15.get('recent_high')} | Zona baja: {m15.get('recent_low')}
+  Volumen actual: {m15.get('vol_now')} | Promedio: {m15.get('vol_avg')}
 """
 
     btc_h4  = btc_data.get("4h", {})
     btc_h1  = btc_data.get("1h", {})
     btc_m15 = btc_data.get("15m", {})
+
     btc_text = f"""
-BTC: 4H={btc_h4.get('trend')} MACD={btc_h4.get('macd_color')} | 1H={btc_h1.get('trend')} MACD={btc_h1.get('macd_color')} | 15M MACD={btc_m15.get('macd_color')} RSI={btc_m15.get('rsi')}
+BTC (ACOMPANAMIENTO):
+  4H tendencia: {btc_h4.get('trend')} | MACD: {btc_h4.get('macd_color')}
+  1H tendencia: {btc_h1.get('trend')} | MACD: {btc_h1.get('macd_color')}
+  15M tendencia: {btc_m15.get('trend')} | MACD: {btc_m15.get('macd_color')} | RSI: {btc_m15.get('rsi')}
+  Precio BTC: {btc_m15.get('price')}
 """
 
     prompt = f"""Eres un trader experto en Smart Money Concept (SMC) aplicando LA MASTER ESTRATEGIA con 5 pilares.
@@ -331,53 +411,55 @@ RESPONDE UNICAMENTE con este JSON exacto:
     try:
         resp = claude.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=600,
+            max_tokens=800,
             messages=[{"role": "user", "content": prompt}]
         )
         raw = resp.content[0].text.strip().replace("```json","").replace("```","").strip()
+        # Reparar JSON truncado
         if raw.count("{") > raw.count("}"):
-            raw += "}" * (raw.count("{") - raw.count("}"))
-        return json.loads(raw)
+            raw = raw + "}" * (raw.count("{") - raw.count("}"))
+        result = json.loads(raw)
+        return result
     except Exception as e:
-        log.error(f"Error IA: {e}")
+        log.error(f"Error IA SMC: {e}")
         return {"action": "NO_TRADE", "confidence": 0, "razon": f"Error IA: {e}"}
 
 
 # ═══════════════════════════════════════════════════════════════
-# 4. OPERACIONES POR USUARIO (cada uno con su Bybit client)
+# 5. OPERACIONES POR USUARIO
 # ═══════════════════════════════════════════════════════════════
-
-def get_price_user(client: HTTP, symbol: str) -> float:
-    try:
-        return float(client.get_tickers(category="linear", symbol=symbol)["result"]["list"][0]["lastPrice"])
-    except:
-        return 0.0
 
 def calc_tp_sl(order_usdt: float, leverage: int) -> tuple:
     """
     Regla de tres proporcional al capital del usuario.
-    Base: $1000 → TP +$37 | SL -$60
+    Base de referencia: $1000 x 10x → TP +$37 | SL -$60
+    Retorna: (tp_usd, sl_usd, commission_usd)
     """
-    ratio    = (order_usdt * leverage) / (BASE_CAPITAL * 10)  # 10 = leverage base
+    controlled = order_usdt * leverage
+    base_controlled = BASE_CAPITAL * BASE_LEVERAGE
+    ratio    = controlled / base_controlled
     tp_usd   = round(BASE_TP_USD * ratio, 2)
     sl_usd   = round(BASE_SL_USD * ratio, 2)
-    comm_usd = round(order_usdt * leverage * COMMISSION_PCT, 2)
+    comm_usd = round(controlled * COMMISSION_PCT, 4)
     return tp_usd, sl_usd, comm_usd
 
 def get_qty_user(client: HTTP, symbol: str, order_usdt: float, leverage: int) -> str:
     try:
-        price    = get_price_user(client, symbol)
+        price    = get_price(client, symbol)
         info     = client.get_instruments_info(category="linear", symbol=symbol)
         lot      = info["result"]["list"][0]["lotSizeFilter"]
         qty_step = float(lot.get("qtyStep") or lot.get("basePrecision") or 0.001)
         min_qty  = float(lot.get("minOrderQty") or 0.001)
         qty      = max(min_qty, round((order_usdt * leverage / price) / qty_step) * qty_step)
+        controlled = round(qty * price, 2)
+        commission = round(controlled * COMMISSION_PCT, 4)
+        log.info(f"    Posicion: {qty} {symbol} | ${controlled:,} controlados | comision aprox: ${commission}")
         return str(round(qty, 8))
     except Exception as e:
-        log.error(f"Error qty: {e}")
+        log.error(f"    Error qty: {e}")
         return "0"
 
-def open_order_user(client: HTTP, symbol: str, side: str, qty: str, leverage: int):
+def open_order_user(client: HTTP, symbol: str, side: str, qty: str, leverage: int) -> str | None:
     try:
         client.set_leverage(category="linear", symbol=symbol,
                             buyLeverage=str(leverage), sellLeverage=str(leverage))
@@ -389,9 +471,11 @@ def open_order_user(client: HTTP, symbol: str, side: str, qty: str, leverage: in
             side=side, orderType="Market", qty=qty,
             timeInForce="IOC", reduceOnly=False
         )
-        return resp["result"].get("orderId","N/A")
+        oid = resp["result"].get("orderId","N/A")
+        log.info(f"    ORDEN {side} {qty} {symbol} | ID: {oid}")
+        return oid
     except Exception as e:
-        log.error(f"Error orden: {e}")
+        log.error(f"    Error orden: {e}")
         return None
 
 def close_order_user(client: HTTP, symbol: str) -> float:
@@ -399,7 +483,7 @@ def close_order_user(client: HTTP, symbol: str) -> float:
         positions = client.get_positions(category="linear", symbol=symbol)
         pos_list  = positions["result"]["list"]
         if not pos_list or float(pos_list[0]["size"]) == 0:
-            return get_price_user(client, symbol)
+            return get_price(client, symbol)
         pos  = pos_list[0]
         side = "Sell" if pos["side"] == "Buy" else "Buy"
         client.place_order(
@@ -407,76 +491,118 @@ def close_order_user(client: HTTP, symbol: str) -> float:
             side=side, orderType="Market",
             qty=pos["size"], reduceOnly=True, timeInForce="IOC"
         )
-        return get_price_user(client, symbol)
+        log.info(f"    Posicion cerrada {symbol}")
+        return get_price(client, symbol)
     except Exception as e:
-        log.error(f"Error cerrando: {e}")
+        log.error(f"    Error cerrando: {e}")
         return 0.0
 
 
 # ═══════════════════════════════════════════════════════════════
-# 5. LOG
+# 6. LOG DE TRADES
 # ═══════════════════════════════════════════════════════════════
 
-def save_trade(user_id, symbol, signal, confidence, entry, close_px, order_usdt, leverage, pilares, razon):
+def save_trade(user_id, symbol, signal, confidence, entry, close_px,
+               order_usdt, leverage, pilares, razon):
     controlled = order_usdt * leverage
     commission = round(controlled * COMMISSION_PCT, 4)
     pnl_pct    = round((close_px-entry)/entry*100, 4) if signal=="UP" else round((entry-close_px)/entry*100, 4)
     pnl_usd    = round(controlled * pnl_pct / 100 - commission, 4)
     result     = "WIN" if pnl_usd > 0 else "LOSS"
 
+    # Guardar en CSV (thread-safe)
     with csv_lock:
         exists = os.path.isfile(LOG_FILE)
         with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             if not exists:
                 w.writerow(["timestamp","user_id","symbol","signal","confidence","pilares",
-                            "order_usdt","leverage","entry","close","pnl_pct","pnl_usd","commission","result","razon"])
+                            "order_usdt","leverage","entry","close","pnl_pct","pnl_usd",
+                            "commission","result","razon"])
             w.writerow([
                 datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-                user_id[:8]+"...",  # parcial por privacidad
+                user_id[:8]+"...",   # parcial por privacidad
                 symbol, signal, confidence, pilares,
                 order_usdt, leverage, entry, close_px,
                 pnl_pct, pnl_usd, commission, result, razon
             ])
 
-    # Guardar en Supabase también
+    # Guardar en Supabase
     try:
         sb.table("trades_log").insert({
-            "user_id":    user_id,
-            "symbol":     symbol,
-            "signal":     signal,
-            "confidence": confidence,
-            "pilares":    pilares,
-            "order_usdt": order_usdt,
-            "leverage":   leverage,
-            "entry":      entry,
+            "user_id":     user_id,
+            "symbol":      symbol,
+            "signal":      signal,
+            "confidence":  confidence,
+            "pilares":     pilares,
+            "order_usdt":  order_usdt,
+            "leverage":    leverage,
+            "entry":       entry,
             "close_price": close_px,
-            "pnl_pct":    pnl_pct,
-            "pnl_usd":    pnl_usd,
-            "commission": commission,
-            "result":     result,
-            "razon":      razon
+            "pnl_pct":     pnl_pct,
+            "pnl_usd":     pnl_usd,
+            "commission":  commission,
+            "result":      result,
+            "razon":       razon
         }).execute()
     except Exception as e:
-        log.warning(f"Error guardando trade en Supabase: {e}")
+        log.warning(f"    Error guardando trade en Supabase: {e}")
 
     return result, pnl_usd
 
 
+def write_state(scan_count: int, active_positions: dict, last_decision: dict = None):
+    """Escribe estado global del bot para monitoreo externo."""
+    state = {
+        "status":           "running",
+        "check_every":      CHECK_EVERY,
+        "scan_count":       scan_count,
+        "active_positions": active_positions,
+        "last_decision":    last_decision or {},
+        "last_update":      datetime.now(timezone.utc).isoformat()
+    }
+    try:
+        with open("bot_state.json", "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def print_summary():
+    """Imprime resumen de operaciones al finalizar."""
+    if not os.path.isfile(LOG_FILE):
+        return
+    df = pd.read_csv(LOG_FILE)
+    if df.empty:
+        return
+    r = df[df["result"].isin(["WIN","LOSS"])]
+    if r.empty:
+        return
+    total   = len(r)
+    wins    = len(r[r["result"]=="WIN"])
+    acc     = round(wins/total*100, 1)
+    pnl_usd = round(r["pnl_usd"].sum(), 2)
+    avg_op  = round(r["pnl_usd"].mean(), 2)
+    print(f"\n{'='*55}")
+    print(f"  {total} operaciones | {acc}% precision | Total: ${pnl_usd:+.2f} | Promedio: ${avg_op:+.2f}/op")
+    print(f"{'='*55}\n")
+
+
 # ═══════════════════════════════════════════════════════════════
-# 6. HILO POR USUARIO — opera y monitorea su posición
+# 7. HILO POR USUARIO — opera y monitorea su posicion
 # ═══════════════════════════════════════════════════════════════
 
-def user_trade_thread(user: dict, decision: dict):
+def user_trade_thread(user: dict, decision: dict, active_positions: dict):
     """
     Corre en un hilo separado por cada usuario.
-    Abre la orden, monitorea, y cierra cuando llega a TP/SL.
+    Abre la orden, monitorea con la misma logica TP/SL del bot original,
+    y cierra cuando se alcanza TP, SL o timeout de 4 horas.
     """
     uid        = user["user_id"]
     api_key    = user["bybit_api_key"]
     api_secret = user["bybit_api_secret"]
-    order_usdt = float(user.get("order_usdt") or 100)
-    leverage   = int(user.get("leverage") or 10)
+    order_usdt = float(user.get("order_usdt") or 100)   # configurado desde interfaz grafica
+    leverage   = int(user.get("leverage") or 10)         # configurado desde interfaz grafica
 
     symbol     = decision["symbol"]
     signal     = decision["signal"]
@@ -485,11 +611,12 @@ def user_trade_thread(user: dict, decision: dict):
     razon      = decision["razon"]
     side       = "Buy" if signal == "UP" else "Sell"
 
-    # TP y SL proporcionales al capital del usuario
+    # TP y SL proporcionales al capital del usuario (regla de tres)
     tp_usd, sl_usd, comm = calc_tp_sl(order_usdt, leverage)
     controlled = order_usdt * leverage
 
-    log.info(f"  [Usuario {uid[:8]}] Capital: ${order_usdt} x{leverage} = ${controlled} | TP: +${tp_usd} | SL: -${sl_usd}")
+    log.info(f"  [Usuario {uid[:8]}] Capital: ${order_usdt} x{leverage} = ${controlled} "
+             f"| TP: +${tp_usd} | SL: -${sl_usd} | Comision: ~${comm}")
 
     try:
         client = HTTP(testnet=False, demo=True, api_key=api_key, api_secret=api_secret)
@@ -499,7 +626,7 @@ def user_trade_thread(user: dict, decision: dict):
 
     qty = get_qty_user(client, symbol, order_usdt, leverage)
     if qty == "0":
-        log.error(f"  [Usuario {uid[:8]}] Cantidad inválida, omitiendo")
+        log.error(f"  [Usuario {uid[:8]}] Cantidad invalida, omitiendo")
         return
 
     order_id = open_order_user(client, symbol, side, qty, leverage)
@@ -507,35 +634,51 @@ def user_trade_thread(user: dict, decision: dict):
         log.error(f"  [Usuario {uid[:8]}] Orden fallida")
         return
 
-    entry_px = get_price_user(client, symbol)
-    log.info(f"  [Usuario {uid[:8]}] ✅ Orden abierta {signal} {symbol} @ ${entry_px} | ID: {order_id}")
-
-    # Monitorear hasta TP/SL/timeout
+    entry_px  = get_price(client, symbol)
     open_time = datetime.now(timezone.utc)
+
+    log.info(f"  [Usuario {uid[:8]}] ✅ OPERACION ABIERTA: {signal} {symbol} @ ${entry_px}")
+    log.info(f"  [Usuario {uid[:8]}]    TP: ~${round(entry_px * (1 + tp_usd/controlled), 4)} "
+             f"| SL: ~${round(entry_px * (1 - sl_usd/controlled), 4)}")
+
+    # Registrar posicion activa (para write_state)
+    active_positions[uid] = {
+        "symbol":    symbol,
+        "signal":    signal,
+        "entry":     entry_px,
+        "open_time": open_time.isoformat()
+    }
+
+    # ── Monitorear igual que el bot original ──
     while True:
         time.sleep(CHECK_EVERY)
-        current_px = get_price_user(client, symbol)
+        current_px = get_price(client, symbol)
         if current_px == 0:
             continue
 
         if signal == "UP":
-            pnl = round(controlled * (current_px - entry_px) / entry_px - comm, 2)
+            pnl_usd = round(controlled * (current_px - entry_px) / entry_px - comm, 2)
         else:
-            pnl = round(controlled * (entry_px - current_px) / entry_px - comm, 2)
+            pnl_usd = round(controlled * (entry_px - current_px) / entry_px - comm, 2)
 
         elapsed = (datetime.now(timezone.utc) - open_time).seconds / 60
-        log.info(f"  [Usuario {uid[:8]}] {symbol} PnL: ${pnl:+.2f} | Precio: {current_px} | {elapsed:.0f}m")
+
+        log.info(f"  [Usuario {uid[:8]}] {symbol} {signal} | "
+                 f"Entrada: {entry_px} | Actual: {current_px} | "
+                 f"PnL: ${pnl_usd:+.2f} | Tiempo: {elapsed:.0f}m")
 
         should_close = False
-        if pnl >= tp_usd:
+        close_reason = ""
+
+        if pnl_usd >= tp_usd:
             should_close = True
-            log.info(f"  [Usuario {uid[:8]}] 🎯 TP alcanzado: ${pnl:+.2f}")
-        elif pnl <= -sl_usd:
+            close_reason = f"Take Profit alcanzado: ${pnl_usd:+.2f}"
+        elif pnl_usd <= -sl_usd:
             should_close = True
-            log.info(f"  [Usuario {uid[:8]}] 🛑 SL alcanzado: ${pnl:+.2f}")
+            close_reason = f"Stop Loss alcanzado: ${pnl_usd:+.2f}"
         elif elapsed >= 240:
             should_close = True
-            log.info(f"  [Usuario {uid[:8]}] ⏰ Tiempo máximo: ${pnl:+.2f}")
+            close_reason = f"Tiempo maximo (4h) alcanzado: ${pnl_usd:+.2f}"
 
         if should_close:
             close_px = close_order_user(client, symbol)
@@ -543,94 +686,127 @@ def user_trade_thread(user: dict, decision: dict):
                 uid, symbol, signal, confidence, entry_px, close_px,
                 order_usdt, leverage, pilares, razon
             )
-            log.info(f"  [Usuario {uid[:8]}] {'✅ WIN' if result=='WIN' else '❌ LOSS'} | PnL final: ${final_pnl:+.2f}")
+            log.info(f"  [Usuario {uid[:8]}] {'✅ WIN' if result=='WIN' else '❌ LOSS'} "
+                     f"| {close_reason} | PnL final: ${final_pnl:+.2f}")
+            # Eliminar de posiciones activas
+            active_positions.pop(uid, None)
             break
 
 
 # ═══════════════════════════════════════════════════════════════
-# 7. BUCLE PRINCIPAL
+# 8. BUCLE PRINCIPAL — Monitoreo continuo con paciencia SMC
 # ═══════════════════════════════════════════════════════════════
 
 def run():
-    log.info("=" * 60)
-    log.info("  MASTER ESTRATEGIA BOT — MODO MULTI-USUARIO INICIADO")
-    log.info("=" * 60)
+    log.info("=" * 65)
+    log.info("  MASTER ESTRATEGIA BOT — MULTI-USUARIO INICIADO")
+    log.info("=" * 65)
+    log.info(f"Activos: {SYMBOLS} | BTC acompanamiento: {BTC_SYMBOL}")
+    log.info("Estrategia: SMC + MACD 15M + Tendencia 4H/1H + Acompanamiento BTC")
+    log.info("Capital y leverage: configurados por usuario desde interfaz grafica")
+    log.info("Filosofia: Solo opera cuando TODOS los pilares alinean. Paciencia es clave.\n")
 
-    scan_count = 0
+    scan_count       = 0
+    last_decision    = {}
+    active_positions = {}   # {user_id: {...}} — para write_state
 
-    while True:
-        scan_count += 1
-        ts = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
-        log.info(f"\n[{ts}] SCAN #{scan_count} — Analizando mercado...")
+    try:
+        while True:
+            scan_count += 1
+            ts = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
 
-        # 1. Cargar usuarios activos
-        users = get_active_users()
-        if not users:
-            log.warning("  Sin usuarios activos. Esperando...")
-            time.sleep(CHECK_EVERY)
-            continue
+            log.info(f"\n[{ts}] SCAN #{scan_count} | Analizando mercado con Master Estrategia SMC...")
 
-        log.info(f"  {len(users)} usuario(s) activo(s) en este ciclo")
+            # 1. Cargar usuarios activos desde Supabase
+            users = get_active_users()
+            if not users:
+                log.warning("  Sin usuarios activos. Esperando...")
+                write_state(scan_count, active_positions, last_decision)
+                time.sleep(CHECK_EVERY)
+                continue
 
-        # 2. Analisis de mercado compartido (una sola vez para todos)
-        btc_data = get_full_analysis(BTC_SYMBOL)
-        all_data = []
-        for sym in SYMBOLS:
-            data = get_full_analysis(sym)
-            all_data.append(data)
-            time.sleep(0.3)
+            log.info(f"  {len(users)} usuario(s) activo(s)")
 
-        # 3. IA decide si hay señal
-        decision = analyze_with_smc(all_data, btc_data)
-        action   = decision.get("action", "NO_TRADE")
-        pilares  = decision.get("pilares_cumplidos", 0)
+            # 2. Analisis de mercado compartido (una sola llamada para todos los usuarios)
+            btc_data = get_full_analysis(BTC_SYMBOL)
+            all_data = []
+            for sym in SYMBOLS:
+                data = get_full_analysis(sym)
+                all_data.append(data)
+                time.sleep(0.3)
 
-        log.info(f"  Decisión IA: {action} | Pilares: {pilares}/5 | Confianza: {decision.get('confidence', 0)}")
-        log.info(f"  Razón: {decision.get('razon', '')}")
+            # 3. IA aplica los 5 pilares SMC
+            decision      = analyze_with_smc(all_data, btc_data)
+            last_decision = decision
+            write_state(scan_count, active_positions, last_decision)
 
-        # 4. Si hay señal válida, lanzar hilo por cada usuario
-        if action == "TRADE" and pilares >= 4:
-            symbol = decision.get("symbol", SYMBOLS[0])
-            signal = decision.get("signal", "UP")
-            log.info(f"\n  🚀 SEÑAL DETECTADA: {signal} {symbol}")
-            log.info(f"  Abriendo órdenes para {len(users)} usuario(s)...\n")
+            action     = decision.get("action", "NO_TRADE")
+            pilares    = decision.get("pilares_cumplidos", 0)
+            confidence = decision.get("confidence", 0)
+            razon      = decision.get("razon", "")
+            macd_conf  = decision.get("macd_confirmacion", "")
+            btc_ok     = decision.get("btc_alineado", False)
+            zona       = decision.get("zona_reaccion", "")
 
-            threads = []
-            for user in users:
-                t = threading.Thread(
-                    target=user_trade_thread,
-                    args=(user, decision),
-                    daemon=True,
-                    name=f"user-{user['user_id'][:8]}"
-                )
-                t.start()
-                threads.append(t)
-                time.sleep(0.5)  # pequeño delay entre usuarios para no saturar
+            tendencia_macro = decision.get("tendencia_macro", "")
+            mini_tendencia  = decision.get("mini_tendencia", "")
 
-            log.info(f"  {len(threads)} hilo(s) de trading iniciados")
+            log.info(f"  Decision IA: {action} | Pilares: {pilares}/5 | Confianza: {confidence}")
+            log.info(f"  Tendencia macro: {tendencia_macro}")
+            log.info(f"  Mini-tendencia:  {mini_tendencia}")
+            log.info(f"  Zona:            {zona}")
+            log.info(f"  MACD 15M:        {macd_conf}")
+            log.info(f"  BTC alineado:    {btc_ok}")
+            log.info(f"  Razon:           {razon}")
 
-            # Esperar a que todos cierren sus posiciones
-            for t in threads:
-                t.join()
+            # 4. Si hay señal valida, lanzar hilo por cada usuario
+            if action == "TRADE" and pilares >= 4:
+                symbol = decision.get("symbol", SYMBOLS[0])
+                signal = decision.get("signal", "UP")
+                log.info(f"\n  🚀 SEÑAL DETECTADA: {signal} {symbol}")
+                log.info(f"  Abriendo ordenes para {len(users)} usuario(s)...\n")
 
-            log.info("  Todos los usuarios cerraron sus posiciones en este ciclo.")
+                threads = []
+                for user in users:
+                    t = threading.Thread(
+                        target=user_trade_thread,
+                        args=(user, decision, active_positions),
+                        daemon=True,
+                        name=f"user-{user['user_id'][:8]}"
+                    )
+                    t.start()
+                    threads.append(t)
+                    time.sleep(0.5)  # pequeño delay entre usuarios
 
-        else:
-            if action == "NO_TRADE":
-                log.info("  Sin setup claro. Esperando próxima oportunidad...")
+                log.info(f"  {len(threads)} hilo(s) de trading iniciados")
+
+                # Esperar a que todos cierren sus posiciones antes del siguiente scan
+                for t in threads:
+                    t.join()
+
+                log.info("  Todos los usuarios cerraron sus posiciones en este ciclo.")
+
             else:
-                log.info(f"  Pilares insuficientes ({pilares}/5). Se requieren mínimo 4.")
+                if action == "NO_TRADE":
+                    log.info("  SIN SETUP: Esperando mejor oportunidad...")
+                else:
+                    log.info(f"  Pilares insuficientes ({pilares}/5): No se opera. Se requieren minimo 4.")
 
-        log.info(f"  Próximo scan en {CHECK_EVERY}s...")
-        time.sleep(CHECK_EVERY)
+            log.info(f"  Proximo scan en {CHECK_EVERY}s...")
+            time.sleep(CHECK_EVERY)
+
+    except KeyboardInterrupt:
+        log.info("\nBot detenido por usuario")
+        log.info("Nota: los hilos con posiciones abiertas son daemon=True y se detendran.")
+        print_summary()
 
 
 # ═══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     missing = []
-    if not SUPABASE_URL:        missing.append("SUPABASE_URL")
+    if not SUPABASE_URL:         missing.append("SUPABASE_URL")
     if not SUPABASE_SERVICE_KEY: missing.append("SUPABASE_SERVICE_KEY")
-    if not ANTHROPIC_API_KEY:   missing.append("ANTHROPIC_API_KEY")
+    if not ANTHROPIC_API_KEY:    missing.append("ANTHROPIC_API_KEY")
     if missing:
         print(f"ERROR: Faltan variables de entorno: {', '.join(missing)}")
         exit(1)

@@ -17949,3 +17949,101 @@ ESTRATEGIA CORRECTA: Esperar pullback de SOL a EMA20 (94.17), de XRP a EMA20 (1.
 2026-05-12 17:42:07,323 [INFO]   Razón: Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayUtZSBrGHCceKoxC1wh'}
 2026-05-12 17:42:07,324 [INFO]   Sin setup claro. Esperando próxima oportunidad...
 2026-05-12 17:42:07,324 [INFO]   Próximo scan en 60s...
+2026-05-12 17:45:14,994 [INFO] ============================================================
+2026-05-12 17:45:14,995 [INFO]   MASTER ESTRATEGIA BOT — MODO MULTI-USUARIO INICIADO
+2026-05-12 17:45:14,995 [INFO] ============================================================
+2026-05-12 17:45:14,996 [INFO] 
+[22:45:14 UTC] SCAN #1 — Analizando mercado...
+2026-05-12 17:45:15,658 [INFO] HTTP Request: GET https://rhqkvmastypsithenaww.supabase.co/rest/v1/bot_config?select=user_id%2Cbybit_api_key%2Cbybit_api_secret%2Corder_usdt%2Cleverage&bybit_api_key=not.is.null&bybit_api_secret=not.is.null "HTTP/2 200 OK"
+2026-05-12 17:45:15,660 [INFO] Usuarios activos cargados: 1
+2026-05-12 17:45:15,660 [INFO]   1 usuario(s) activo(s) en este ciclo
+2026-05-12 17:45:28,729 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 401 Unauthorized"
+2026-05-12 17:45:28,731 [ERROR] Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayV9QAFT74hfUAcVR96P'}
+2026-05-12 17:45:28,731 [INFO]   Decisión IA: NO_TRADE | Pilares: 0/5 | Confianza: 0
+2026-05-12 17:45:28,731 [INFO]   Razón: Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayV9QAFT74hfUAcVR96P'}
+2026-05-12 17:45:28,731 [INFO]   Sin setup claro. Esperando próxima oportunidad...
+2026-05-12 17:45:28,731 [INFO]   Próximo scan en 60s...
+2026-05-12 17:46:28,738 [INFO] 
+[22:46:28 UTC] SCAN #2 — Analizando mercado...
+2026-05-12 17:46:29,251 [INFO] HTTP Request: GET https://rhqkvmastypsithenaww.supabase.co/rest/v1/bot_config?select=user_id%2Cbybit_api_key%2Cbybit_api_secret%2Corder_usdt%2Cleverage&bybit_api_key=not.is.null&bybit_api_secret=not.is.null "HTTP/2 200 OK"
+2026-05-12 17:46:29,252 [INFO] Usuarios activos cargados: 1
+2026-05-12 17:46:29,252 [INFO]   1 usuario(s) activo(s) en este ciclo
+2026-05-12 17:46:41,033 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 401 Unauthorized"
+2026-05-12 17:46:41,034 [ERROR] Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayVEjyW7PwDFoWSTJWcJ'}
+2026-05-12 17:46:41,035 [INFO]   Decisión IA: NO_TRADE | Pilares: 0/5 | Confianza: 0
+2026-05-12 17:46:41,035 [INFO]   Razón: Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayVEjyW7PwDFoWSTJWcJ'}
+2026-05-12 17:46:41,035 [INFO]   Sin setup claro. Esperando próxima oportunidad...
+2026-05-12 17:46:41,035 [INFO]   Próximo scan en 60s...
+2026-05-12 17:47:41,036 [INFO] 
+[22:47:41 UTC] SCAN #3 — Analizando mercado...
+2026-05-12 17:47:41,458 [INFO] HTTP Request: GET https://rhqkvmastypsithenaww.supabase.co/rest/v1/bot_config?select=user_id%2Cbybit_api_key%2Cbybit_api_secret%2Corder_usdt%2Cleverage&bybit_api_key=not.is.null&bybit_api_secret=not.is.null "HTTP/2 200 OK"
+2026-05-12 17:47:41,461 [INFO] Usuarios activos cargados: 1
+2026-05-12 17:47:41,461 [INFO]   1 usuario(s) activo(s) en este ciclo
+2026-05-12 17:47:53,406 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 401 Unauthorized"
+2026-05-12 17:47:53,406 [ERROR] Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayVL5BHstWCtwS9StAAo'}
+2026-05-12 17:47:53,406 [INFO]   Decisión IA: NO_TRADE | Pilares: 0/5 | Confianza: 0
+2026-05-12 17:47:53,406 [INFO]   Razón: Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayVL5BHstWCtwS9StAAo'}
+2026-05-12 17:47:53,407 [INFO]   Sin setup claro. Esperando próxima oportunidad...
+2026-05-12 17:47:53,407 [INFO]   Próximo scan en 60s...
+2026-05-12 17:48:53,412 [INFO] 
+[22:48:53 UTC] SCAN #4 — Analizando mercado...
+2026-05-12 17:48:53,666 [INFO] HTTP Request: GET https://rhqkvmastypsithenaww.supabase.co/rest/v1/bot_config?select=user_id%2Cbybit_api_key%2Cbybit_api_secret%2Corder_usdt%2Cleverage&bybit_api_key=not.is.null&bybit_api_secret=not.is.null "HTTP/2 200 OK"
+2026-05-12 17:48:53,667 [INFO] Usuarios activos cargados: 1
+2026-05-12 17:48:53,668 [INFO]   1 usuario(s) activo(s) en este ciclo
+2026-05-12 17:49:05,344 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 401 Unauthorized"
+2026-05-12 17:49:05,346 [ERROR] Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayVRNxkqmnZQXDmR7eHd'}
+2026-05-12 17:49:05,346 [INFO]   Decisión IA: NO_TRADE | Pilares: 0/5 | Confianza: 0
+2026-05-12 17:49:05,346 [INFO]   Razón: Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayVRNxkqmnZQXDmR7eHd'}
+2026-05-12 17:49:05,346 [INFO]   Sin setup claro. Esperando próxima oportunidad...
+2026-05-12 17:49:05,347 [INFO]   Próximo scan en 60s...
+2026-05-12 17:50:05,352 [INFO] 
+[22:50:05 UTC] SCAN #5 — Analizando mercado...
+2026-05-12 17:50:05,769 [INFO] HTTP Request: GET https://rhqkvmastypsithenaww.supabase.co/rest/v1/bot_config?select=user_id%2Cbybit_api_key%2Cbybit_api_secret%2Corder_usdt%2Cleverage&bybit_api_key=not.is.null&bybit_api_secret=not.is.null "HTTP/2 200 OK"
+2026-05-12 17:50:05,770 [INFO] Usuarios activos cargados: 1
+2026-05-12 17:50:05,770 [INFO]   1 usuario(s) activo(s) en este ciclo
+2026-05-12 17:50:18,561 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 401 Unauthorized"
+2026-05-12 17:50:18,562 [ERROR] Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayVWmkMjVqjAZe3i7G1G'}
+2026-05-12 17:50:18,563 [INFO]   Decisión IA: NO_TRADE | Pilares: 0/5 | Confianza: 0
+2026-05-12 17:50:18,563 [INFO]   Razón: Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayVWmkMjVqjAZe3i7G1G'}
+2026-05-12 17:50:18,563 [INFO]   Sin setup claro. Esperando próxima oportunidad...
+2026-05-12 17:50:18,563 [INFO]   Próximo scan en 60s...
+2026-05-12 17:51:18,568 [INFO] 
+[22:51:18 UTC] SCAN #6 — Analizando mercado...
+2026-05-12 17:51:19,187 [INFO] HTTP Request: GET https://rhqkvmastypsithenaww.supabase.co/rest/v1/bot_config?select=user_id%2Cbybit_api_key%2Cbybit_api_secret%2Corder_usdt%2Cleverage&bybit_api_key=not.is.null&bybit_api_secret=not.is.null "HTTP/2 200 OK"
+2026-05-12 17:51:19,188 [INFO] Usuarios activos cargados: 1
+2026-05-12 17:51:19,188 [INFO]   1 usuario(s) activo(s) en este ciclo
+2026-05-12 17:51:31,798 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 401 Unauthorized"
+2026-05-12 17:51:31,801 [ERROR] Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayVcAxFeqEf69G6NZhJb'}
+2026-05-12 17:51:31,801 [INFO]   Decisión IA: NO_TRADE | Pilares: 0/5 | Confianza: 0
+2026-05-12 17:51:31,801 [INFO]   Razón: Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayVcAxFeqEf69G6NZhJb'}
+2026-05-12 17:51:31,801 [INFO]   Sin setup claro. Esperando próxima oportunidad...
+2026-05-12 17:51:31,801 [INFO]   Próximo scan en 60s...
+2026-05-12 17:59:22,796 [INFO] ============================================================
+2026-05-12 17:59:22,797 [INFO]   MASTER ESTRATEGIA BOT — MODO MULTI-USUARIO INICIADO
+2026-05-12 17:59:22,797 [INFO] ============================================================
+2026-05-12 17:59:22,797 [INFO] 
+[22:59:22 UTC] SCAN #1 — Analizando mercado...
+2026-05-12 18:06:53,086 [INFO] =================================================================
+2026-05-12 18:06:53,087 [INFO]   MASTER ESTRATEGIA BOT — MULTI-USUARIO INICIADO
+2026-05-12 18:06:53,087 [INFO] =================================================================
+2026-05-12 18:06:53,087 [INFO] Activos: ['SOLUSDT', 'XRPUSDT', 'ETHUSDT'] | BTC acompanamiento: BTCUSDT
+2026-05-12 18:06:53,087 [INFO] Estrategia: SMC + MACD 15M + Tendencia 4H/1H + Acompanamiento BTC
+2026-05-12 18:06:53,087 [INFO] Capital y leverage: configurados por usuario desde interfaz grafica
+2026-05-12 18:06:53,087 [INFO] Filosofia: Solo opera cuando TODOS los pilares alinean. Paciencia es clave.
+
+2026-05-12 18:06:53,087 [INFO] 
+[23:06:53 UTC] SCAN #1 | Analizando mercado con Master Estrategia SMC...
+2026-05-12 18:06:53,912 [INFO] HTTP Request: GET https://rhqkvmastypsithenaww.supabase.co/rest/v1/bot_config?select=user_id%2Cbybit_api_key%2Cbybit_api_secret%2Corder_usdt%2Cleverage&bybit_api_key=not.is.null&bybit_api_secret=not.is.null "HTTP/2 200 OK"
+2026-05-12 18:06:53,913 [INFO] Usuarios activos cargados: 1
+2026-05-12 18:06:53,913 [INFO]   1 usuario(s) activo(s)
+2026-05-12 18:07:06,698 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 401 Unauthorized"
+2026-05-12 18:07:06,700 [ERROR] Error IA SMC: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayWo67UEEkncN94RcPYR'}
+2026-05-12 18:07:06,703 [INFO]   Decision IA: NO_TRADE | Pilares: 0/5 | Confianza: 0
+2026-05-12 18:07:06,703 [INFO]   Tendencia macro: 
+2026-05-12 18:07:06,703 [INFO]   Mini-tendencia:  
+2026-05-12 18:07:06,703 [INFO]   Zona:            
+2026-05-12 18:07:06,703 [INFO]   MACD 15M:        
+2026-05-12 18:07:06,703 [INFO]   BTC alineado:    False
+2026-05-12 18:07:06,703 [INFO]   Razon:           Error IA: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CayWo67UEEkncN94RcPYR'}
+2026-05-12 18:07:06,703 [INFO]   SIN SETUP: Esperando mejor oportunidad...
+2026-05-12 18:07:06,703 [INFO]   Proximo scan en 60s...
