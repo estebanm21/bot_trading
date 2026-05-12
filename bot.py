@@ -225,32 +225,107 @@ BTC: 4H={btc_h4.get('trend')} MACD={btc_h4.get('macd_color')} | 1H={btc_h1.get('
 
     prompt = f"""Eres un trader experto en Smart Money Concept (SMC) aplicando LA MASTER ESTRATEGIA con 5 pilares.
 
-DATOS:
+DATOS ACTUALES DEL MERCADO:
 {assets_text}
 {btc_text}
 
-PILARES:
-1. TENDENCIA: Identifica macro (4H) y mini-tendencia (1H+30M). No necesitan ir en misma dirección.
-2. ZONA SMC: Precio debe estar en soporte/resistencia clave (bb_pos<25% o >75%, cerca de recent_high/low, RSI extremo)
-3. POSICIONAMIENTO: Precio tocando la zona, no en zona media
-4. MACD 15M: cambio_rojo_a_verde=compra, cambio_verde_a_rojo=venta. Sin esto NO entrar.
-5. BTC: alineado con la dirección de la operación
+CONCEPTO CLAVE - MINI-TENDENCIAS DENTRO DE ZONAS DE REACCION:
+El mercado opera en tendencias dentro de tendencias. ESTO ES FUNDAMENTAL:
 
-REGLAS: Mínimo 5/5 pilares. Si no hay setup claro -> NO_TRADE.
+ESCENARIO A - Tendencia macro ALCISTA + precio en RESISTENCIA:
+  → El precio sube en 4H pero llega a una zona de resistencia fuerte
+  → En 1H y 30M se forma una MINI-TENDENCIA BAJISTA dentro de esa resistencia
+  → Esto es una oportunidad de VENTA valida aunque el 4H sea alcista
+  → Señal: 4H alcista + precio en recent_high/bb_upper + 1H bajista o neutral + MACD 15M cambia verde→rojo
+  → OPERAR: DOWN (venta desde resistencia)
 
-Responde SOLO este JSON:
+ESCENARIO B - Tendencia macro BAJISTA + precio en SOPORTE:
+  → El precio baja en 4H pero llega a una zona de soporte fuerte
+  → En 1H y 30M se forma una MINI-TENDENCIA ALCISTA dentro de ese soporte
+  → Esto es una oportunidad de COMPRA valida aunque el 4H sea bajista
+  → Señal: 4H bajista + precio en recent_low/bb_lower + 1H alcista o neutral + MACD 15M cambia rojo→verde
+  → OPERAR: UP (compra desde soporte)
+
+ESCENARIO C - Tendencia clara en todas las temporalidades:
+  → 4H, 1H y 30M todos alineados en la misma direccion
+  → Precio pullback a EMA20 o zona de soporte/resistencia intermedia
+  → MACD 15M confirma con cambio de color
+  → OPERAR en direccion de la tendencia
+
+APLICA LOS 5 PILARES DE LA MASTER ESTRATEGIA:
+
+PILAR 1 - TENDENCIA MACRO Y MINI-TENDENCIA:
+- Identifica la tendencia MACRO en 4H (direccion principal del mercado)
+- Identifica la MINI-TENDENCIA en 1H y 30M (movimiento actual dentro de la macro)
+- NO es necesario que macro y mini vayan en la misma direccion
+- LO IMPORTANTE: la mini-tendencia debe estar confirmada en 1H y 30M
+- Ejemplos validos:
+  * 4H alcista + 1H bajista + precio en resistencia = VENTA valida
+  * 4H bajista + 1H alcista + precio en soporte = COMPRA valida
+  * 4H alcista + 1H alcista + precio en soporte = COMPRA valida (tendencia confirmada)
+
+PILAR 2 - ZONA DE REACCION SMC:
+El precio DEBE estar en una zona de alta probabilidad de reaccion:
+- Zona de RESISTENCIA (para ventas):
+  * Precio cerca de recent_high en 4H o 1H
+  * bb_pos > 75% en 1H o 30M
+  * RSI > 65 en 1H o 30M
+  * Precio en maximo reciente con velas de rechazo
+- Zona de SOPORTE (para compras):
+  * Precio cerca de recent_low en 4H o 1H
+  * bb_pos < 25% en 1H o 30M
+  * RSI < 35 en 1H o 30M
+  * Precio en minimo reciente con velas de rebote
+- Si el precio esta en zona media sin referencia clara -> NO operar
+
+PILAR 3 - POSICIONAMIENTO (precio dentro de la zona):
+- Para VENTA: precio debe estar tocando o dentro de la zona de resistencia
+  * bb_pos > 70% en al menos 2 temporalidades
+  * O precio muy cerca del recent_high de 1H o 4H
+- Para COMPRA: precio debe estar tocando o dentro de la zona de soporte
+  * bb_pos < 30% en al menos 2 temporalidades
+  * O precio muy cerca del recent_low de 1H o 4H
+- Si el precio ignora la zona y rompe con fuerza -> NO operar (no perseguir)
+
+PILAR 4 - CONFIRMACION MACD 15M (EL DISPARO DE ENTRADA - MAS IMPORTANTE):
+Este es el gatillo final. Sin esto NO se entra aunque todo lo demas este perfecto.
+- Para VENTA: MACD 15M debe mostrar debilitamiento alcista:
+  * macd_color = "cambio_verde_a_rojo" (cruce bajista) <- SEÑAL PERFECTA
+  * macd_color = "verde_claro" (histograma verde reduciendose) <- SEÑAL BUENA
+- Para COMPRA: MACD 15M debe mostrar debilitamiento bajista:
+  * macd_color = "cambio_rojo_a_verde" (cruce alcista) <- SEÑAL PERFECTA
+  * macd_color = "rojo_claro" (histograma rojo reduciendose) <- SEÑAL BUENA
+- Si MACD 15M es verde_fuerte y queremos vender -> ESPERAR
+- Si MACD 15M es rojo_fuerte y queremos comprar -> ESPERAR
+
+PILAR 5 - ACOMPANAMIENTO BTC:
+BTC debe estar alineado con la operacion que vamos a hacer:
+- Para VENTA en altcoin: BTC debe mostrar debilidad (bajista en 1H o MACD 15M debilitandose)
+- Para COMPRA en altcoin: BTC debe mostrar fuerza (alcista en 1H o MACD 15M fortaleciendo)
+- BTC no necesita cumplir todos los pilares, solo estar alineado en direccion
+- Si BTC va claramente en contra -> reducir confianza o NO operar
+
+REGLAS CRITICAS DE LA MASTER ESTRATEGIA:
+1. Solo operar cuando el precio ESTA en la zona, no cuando se acerca
+2. Si el precio llega a la zona pero la ignora y sigue con fuerza -> NO operar
+3. Esperar siempre la confirmacion del MACD 15M antes de entrar
+4. Es mejor perderse una operacion que entrar sin confirmacion
+5. Minimo 4 de 5 pilares deben confirmarse para operar
+6. La mini-tendencia en 1H/30M es MAS importante que la tendencia macro en 4H
+
+RESPONDE UNICAMENTE con este JSON exacto:
 {{
   "action": "TRADE" o "NO_TRADE",
-  "symbol": "SOLUSDT/XRPUSDT/ETHUSDT",
-  "signal": "UP" o "DOWN",
-  "confidence": 0.0-1.0,
-  "pilares_cumplidos": 1-5,
-  "tendencia_macro": "...",
-  "mini_tendencia": "...",
-  "zona_reaccion": "...",
-  "macd_confirmacion": "...",
-  "btc_alineado": true/false,
-  "razon": "..."
+  "symbol": "SOLUSDT" o "XRPUSDT" o "ETHUSDT" (solo si action=TRADE),
+  "signal": "UP" o "DOWN" (solo si action=TRADE),
+  "confidence": numero 0.0-1.0,
+  "pilares_cumplidos": numero 1-5 de pilares que se cumplen,
+  "tendencia_macro": "descripcion de la tendencia en 4H",
+  "mini_tendencia": "descripcion de la mini-tendencia en 1H/30M",
+  "zona_reaccion": "descripcion de la zona donde esta el precio",
+  "macd_confirmacion": "descripcion del estado del MACD 15M",
+  "btc_alineado": true o false,
+  "razon": "explicacion clara de por que operar o no operar mencionando tendencia macro mini-tendencia zona y MACD"
 }}"""
 
     try:
